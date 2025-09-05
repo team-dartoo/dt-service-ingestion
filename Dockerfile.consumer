@@ -1,0 +1,13 @@
+# Dockerfile for Consumer (Worker)
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Copy and install requirements
+COPY consumer/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy consumer code
+COPY consumer/ /app/
+
+CMD ["python", "-m", "celery", "-A", "worker", "worker", "--loglevel=info", "--concurrency=2"]

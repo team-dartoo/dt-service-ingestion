@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  # RabbitMQ Message Broker
+  rabbitmq:
+    image: rabbitmq:4
+    container_name: dt-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: password
+    ports:
+      - "15672:15672"   # Management UI only
+    networks:
+      - dt-network
+
+  # Producer Service (UUID Generator)
+  producer:
+    build:
+      context: .
+      dockerfile: Dockerfile.producer
+    container_name: dt-producer
+    environment:
+      - CELERY_BROKER_URL=amqp://admin:password@rabbitmq:5672/
+    volumes:
+      - ./producer:/app
+      - ./logs:/app/logs
+    depends_on:
+      - rabbitmq
+    networks:
+      - dt-network
+
+  # Consumer Service (Worker)
+  consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile.consumer
+    container_name: dt-consumer
+    environment:
+      - CELERY_BROKER_URL=amqp://admin:password@rabbitmq:5672/
+    volumes:
+      - ./consumer:/app
+      - ./logs:/app/logs
+    depends_on:
+      - rabbitmq
+    networks:
+      - dt-network
+
+networks:
+  dt-network:
+    external: true

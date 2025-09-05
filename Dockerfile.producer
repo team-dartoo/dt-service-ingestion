@@ -1,0 +1,13 @@
+# Dockerfile for Producer (UUID Generator)
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Copy and install requirements
+COPY producer/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy producer code
+COPY producer/ /app/
+
+CMD ["python", "main.py"]

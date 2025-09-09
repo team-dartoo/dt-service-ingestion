@@ -2,6 +2,17 @@ import uuid
 import time
 from celery import Celery
 import logging
+# --Start: Polling Logic--
+import os
+import io
+import re                   # XML 인코딩 선언문 수정                  
+import zipfile
+import signal
+import threading
+import chardet              # 문자 인코딩 감지
+from datetime import datetime, UTC
+from typing import Set
+# --End: Polling Logic--
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

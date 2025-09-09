@@ -4,7 +4,7 @@ from typing import List, Optional, Dict, Any
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from src.models.disclosure import Disclosure
+from producer.models.disclosure import Disclosure
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(levelname)s | %(message)s')

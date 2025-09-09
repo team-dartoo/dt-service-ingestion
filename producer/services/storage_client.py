@@ -4,9 +4,8 @@ from minio import Minio
 from minio.error import S3Error
 
 class MinioClient:
-    '''
-    - Minio 서버 연결 및 파일 업로드 관리 클래스
-    '''
+    ''' Minio 서버 연결 및 파일 업로드 관리 클래스 '''
+    
     def __init__(self, endpoint: str, access_key: str, secret_key: str, bucket_name: str, secure: bool = False):
         try:
             self.client = Minio(
@@ -23,6 +22,7 @@ class MinioClient:
 
     def _ensure_bucket_exists(self):
         ''' 버킷 존재 여부 확인 및 필요 시 생성 '''
+        
         try:
             found = self.client.bucket_exists(self.bucket_name)
             if not found:

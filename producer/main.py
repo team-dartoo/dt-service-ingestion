@@ -19,9 +19,9 @@ from typing import Set
 
 from dotenv import load_dotenv
 
-from producer.services.dart_api_client import DartApiClient
-from producer.services.storage_client import MinioClient
-from producer.models.disclousre import Disclosure
+from services.dart_api_client import DartApiClient
+from services.storage_client import MinioClient
+from models.disclosure import Disclosure
 
 load_dotenv()
 

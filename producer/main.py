@@ -29,9 +29,9 @@ from typing import Set
 from dotenv import load_dotenv
 from celery import Celery
 
-from src.services.dart_api_client import DartApiClient
-from src.services.storage_client import MinioClient
-from src.models.disclosure import Disclosure
+from services.dart_api_client import DartApiClient
+from services.storage_client import MinioClient
+from models.disclosure import Disclosure
 
 load_dotenv()
 

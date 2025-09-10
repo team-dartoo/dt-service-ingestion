@@ -1,29 +1,49 @@
-import uuid
-import time
-from celery import Celery
-import logging
+'''
+- DART 폴링 및 Celery 작업 발행 메인 모듈
 
-# --Start: Polling Logic--
+** 역할 **
+	- Ingestion Service: DART Open API에서 주기적으로 신규 공시를 수집
+	- Producer: 수집하여 Minio에 저장한 공시 파일의 경로(`object_name`)를
+	        Celery 작업 큐로 전송하여 비동기 후속 처리를 요청
 
-
+** 구성 요소 **
+	- Config: 환경변수 및 설정 관리
+	- SignalHandler: 안정적인 서비스 종료(Graceful Shutdown) 처리
+	- polling_loop: 핵심 데이터 수집 및 Celery 작업 발행 로직
+	- run_polling_service: 전체 서비스 실행 및 스레드 관리
+'''
 
 import os
 import io
-import re                   # XML 인코딩 선언문 수정                  
+import re                                   # XML 인코딩 선언문 수정
 import zipfile
+import time
+import logging
 import signal
 import threading
-import chardet              # 문자 인코딩 감지
+import chardet                              # 문자 인코딩 감지 라이브러리
+import xml.etree.ElementTree as ET          # XML 유효성 검사
 from datetime import datetime, UTC
 from typing import Set
 
 from dotenv import load_dotenv
+from celery import Celery
 
-from services.dart_api_client import DartApiClient
-from services.storage_client import MinioClient
-from models.disclosure import Disclosure
+from src.services.dart_api_client import DartApiClient
+from src.services.storage_client import MinioClient
+from src.models.disclosure import Disclosure
 
 load_dotenv()
+
+# Celery Producer App 설정 - RabbitMQ 접속 정보는 환경에 맞게 수정 필요
+celery_app = Celery('producer', broker='amqp://admin:password@localhost:5672/')
+celery_app.conf.update(
+    task_serializer='json',
+    accept_content=['json'],
+    result_serializer='json',
+    timezone='Asia/Seoul',
+    enable_utc=False,
+)
 
 class Config:
     ''' 환경 변수 기반 설정 값 보관/검증 클래스 '''
@@ -47,7 +67,7 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(threadName)s | %(message)s"
 )
 
-# 그레이스풀 셧다운 핸들러
+# Graceful Shutdown Handler
 class SignalHandler:
     shutdown_requested = False
     def __init__(self):
@@ -64,13 +84,12 @@ def handle_user_input(client: DartApiClient, handler: SignalHandler, refresh_eve
     
     while not handler.shutdown_requested:
         try:
-            print("\nEnter the corporation code (Enter: Renewal, Exit: Ctrl+C): ", end='', flush=True)
+            print("\n조회할 기업 코드 입력 (수동 갱신: '갱신', 종료: Ctrl+C): ", end='', flush=True)
             user_input = input().strip()
             
-            if not user_input:
-                continue
+            if not user_input: continue
             
-            if user_input == 'Renewal':
+            if user_input == '갱신':
                 logging.info("Manual refresh triggered by user.")
                 refresh_event.set()
                 continue
@@ -84,7 +103,7 @@ def handle_user_input(client: DartApiClient, handler: SignalHandler, refresh_eve
                         print(f"{key}: {value}")
                 print("---------------------")
             else:
-                print(f" > [{user_input}] is not existence...")
+                print(f" > [{user_input}]에 대한 정보를 가져오지 못했습니다.")
 
         except (EOFError, KeyboardInterrupt):
             break
@@ -92,83 +111,89 @@ def handle_user_input(client: DartApiClient, handler: SignalHandler, refresh_eve
             logging.error(f"An error occurred in user input thread: {e}")
 
 def polling_loop(dart_client: DartApiClient, storage_client: MinioClient, handler: SignalHandler, refresh_event: threading.Event):
-    ''' 주기적으로 DART API를 폴링하여 신규 공시 수집 및 저장 '''
+    ''' 주기적으로 DART API를 폴링하여 신규 공시 수집, 저장 후 Celery 작업 발행 '''
     
     processed_rcept_nos: Set[str] = set()
 
     while not handler.shutdown_requested:
         try:
-            # 날짜 설정 
+            # 날짜 설정
             date_to_fetch = datetime.now(UTC).strftime('%Y%m%d')
             
             logging.info(f"Fetching disclosures for {date_to_fetch}...")
             disclosures = dart_client.fetch_disclosures(date_to_fetch)
 
-            if disclosures:
-                new_disclosures_found = False
+            if not disclosures:
+                logging.info("No disclosures found in this cycle.")
+            else:
                 for disclosure in reversed(disclosures):
-                    if disclosure.rcept_no not in processed_rcept_nos:
-                        new_disclosures_found = True
-                        logging.info(f"NEW: [{disclosure.corp_code}] [{disclosure.corp_name}] {disclosure.report_nm}")
-                        
-                        # 파일 처리 로직 
-                        content_bytes = dart_client.fetch_document_content(disclosure.rcept_no)
-                        if not content_bytes:
-                            logging.warning(f" > Failed to fetch document for {disclosure.rcept_no}.")
-                            processed_rcept_nos.add(disclosure.rcept_no)
-                            continue
+                    if disclosure.rcept_no in processed_rcept_nos:
+                        continue
 
-                        logging.info(f" > Fetched document for {disclosure.rcept_no}, size: {len(content_bytes)} bytes.")
-                        xml_content_bytes = None
+                    logging.info(f"NEW: [{disclosure.corp_code}] [{disclosure.corp_name}] {disclosure.report_nm}")
+                    
+                    # 파일 처리 로직: Zip 압축 해제
+                    content_bytes = dart_client.fetch_document_content(disclosure.rcept_no)
+                    if not content_bytes:
+                        logging.warning(f" > Failed to fetch document for {disclosure.rcept_no}.")
+                        processed_rcept_nos.add(disclosure.rcept_no)
+                        continue
 
-                        # 1. 파일이 ZIP 형식인지 명시적으로 확인
+                    xml_content_bytes = None
+                    try:
+                        # 1. ZIP 파일 확인
                         if zipfile.is_zipfile(io.BytesIO(content_bytes)):
-                            logging.info(f" > Document for {disclosure.rcept_no} is a zip file. Extracting XML...")
-                            try:
-                                with zipfile.ZipFile(io.BytesIO(content_bytes)) as z:
-                                    # 압축 파일 내의 .xml 파일 찾기
-                                    xml_filename = next((name for name in z.namelist() if name.lower().endswith('.xml')), None)
-                                    if xml_filename:
-                                        xml_content_bytes = z.read(xml_filename)
-                                        logging.info(f" > Successfully extracted {xml_filename} from zip.")
-                                    else:
-                                        logging.warning(f" > No XML file found in zip for {disclosure.rcept_no}.")
-                            except zipfile.BadZipFile:
-                                logging.error(f" > Failed to process zip file for {disclosure.rcept_no}. It may be corrupted.")
+                            with zipfile.ZipFile(io.BytesIO(content_bytes)) as z:
+                                # 압축 파일 내 .xml 파일 찾기
+                                xml_filename = next((name for name in z.namelist() if name.lower().endswith('.xml')), None)
+                                if xml_filename:
+                                    xml_content_bytes = z.read(xml_filename)
+                                else:
+                                    logging.warning(f" > No XML file found in zip for {disclosure.rcept_no}.")
                         else:
-                            # 2. ZIP 파일이 아니면, 내용 전체를 XML/HTML로 간주
-                            logging.info(f" > Document for {disclosure.rcept_no} is not a zip file. Processing as plain text.")
+                            # 2. ZIP 파일 아닌 경우, 내용 전체를 XML/HTML로 판단
                             xml_content_bytes = content_bytes
-                        
-                        if xml_content_bytes:
+                    except zipfile.BadZipFile:
+                        logging.error(f" > Corrupted zip file for {disclosure.rcept_no}.")
+                        processed_rcept_nos.add(disclosure.rcept_no)
+                        continue
+                    
+                    if xml_content_bytes:
+                        try:
                             # 3. chardet으로 인코딩 감지
                             detected = chardet.detect(xml_content_bytes)
                             encoding = detected['encoding'] if detected['confidence'] > 0.7 else 'utf-8'
-                            logging.info(f" > Detected encoding: {encoding} with confidence {detected['confidence']:.2f}")
-
+                            
+                            # 4. 감지된 인코딩으로 디코딩 진행
+                            xml_str = xml_content_bytes.decode(encoding, errors='ignore')
+                            xml_str = re.sub(r'(<\?xml[^>]*encoding=")[^"]*(")', r'\1UTF-8\2', xml_str, count=1, flags=re.IGNORECASE)
+                            final_content_bytes = xml_str.encode('utf-8')
+                            
+                            # XML 유효성 검사 
                             try:
-                                # 4. 감지된 인코딩으로 디코딩
-                                xml_str = xml_content_bytes.decode(encoding, errors='ignore')
-                                
-                                # 5. XML 선언의 인코딩을 UTF-8로 수정 (꼬리표와 내용 일치)
-                                xml_str = re.sub(r'(<\?xml[^>]*encoding=")[^"]*(")', r'\1UTF-8\2', xml_str, count=1, flags=re.IGNORECASE)
-                                
-                                # 6. 최종적으로 UTF-8 바이트로 변환하여 저장 준비
-                                final_content_bytes = xml_str.encode('utf-8')
-                                
-                                object_name = f"{disclosure.rcept_dt}/{disclosure.rcept_no}.xml"
-                                storage_client.upload_document(object_name, final_content_bytes)
-                            except (UnicodeDecodeError, TypeError) as e:
-                                logging.error(f" > Failed to decode/encode content for {disclosure.rcept_no} with detected encoding {encoding}: {e}")
-                        else:
-                            logging.warning(f" > Could not extract final XML content for {disclosure.rcept_no}.")
+                                # 최종 생성된 데이터가 올바른 XML 형식인지 파싱을 시도하여 검증
+                                ET.fromstring(final_content_bytes)
+                            except ET.ParseError as pe:
+                                # 파싱 실패 시, 이 파일은 문제가 있음을 기록하고 후속 처리에서 제외
+                                logging.error(f" > XML validation failed for {disclosure.rcept_no}. Skipping. Error: {pe}")
+                                processed_rcept_nos.add(disclosure.rcept_no)
+                                continue
+
+                            object_name = f"{disclosure.rcept_dt}/{disclosure.rcept_no}.xml"
+                            
+                            # Minio에 업로드하고 성공 시 Celery 작업 발행
+                            if storage_client.upload_document(object_name, final_content_bytes):
+                                logging.info(f" > Upload success. Sending task to worker for: {object_name}")
+                                celery_app.send_task('tasks.summarize_report', args=[object_name])
+                            else:
+                                logging.error(f" > Failed to upload {object_name}. Task not sent.")
+
+                        except (UnicodeDecodeError, TypeError) as e:
+                            logging.error(f" > Failed to decode/encode content for {disclosure.rcept_no}: {e}")
                     
-                        processed_rcept_nos.add(disclosure.rcept_no)
-                
-                if not new_disclosures_found:
-                    logging.info("No new disclosures found in this cycle.")
+                    processed_rcept_nos.add(disclosure.rcept_no)
             
-            logging.info("Waiting for next cycle or manual refresh trigger...")
+            logging.info("Waiting for next cycle...")
             refresh_event.wait(timeout=Config.POLLING_INTERVAL_SECONDS)
             if refresh_event.is_set():
                 logging.info("Manual refresh signal received, starting new cycle immediately.")
@@ -203,85 +228,27 @@ def run_polling_service():
     handler = SignalHandler()
     manual_refresh_event = threading.Event()
 
-    user_thread = threading.Thread(
-        target=handle_user_input, 
-        args=(dart_client, handler, manual_refresh_event), 
-        daemon=True,
-        name="UserInput"
-    )
+    user_thread = threading.Thread(target=handle_user_input, args=(dart_client, handler, manual_refresh_event), daemon=True, name="UserInput")
     user_thread.start()
     
-    polling_thread = threading.Thread(
-        target=polling_loop, 
-        args=(dart_client, storage_client, handler, manual_refresh_event), 
-        daemon=True,
-        name="Polling"
-    )
+    polling_thread = threading.Thread(target=polling_loop, args=(dart_client, storage_client, handler, manual_refresh_event), daemon=True, name="Polling")
     polling_thread.start()
     
-    logging.info("Starting DART ingestion service")
-    logging.info(f"Polling interval {Config.POLLING_INTERVAL_SECONDS} seconds")
+    logging.info("Starting DART ingestion service and producer.")
+    logging.info(f"Polling interval: {Config.POLLING_INTERVAL_SECONDS} seconds")
     
-    # 메인 스레드는 시그널 핸들러가 종료를 요청할 때까지 대기
+    # 종료 요청까지 메인 스레드는 대기
     while not handler.shutdown_requested:
         try:
             time.sleep(1)
         except KeyboardInterrupt:
             handler.request_shutdown()
             break
-            
-    manual_refresh_event.set()           # 스레드가 대기 상태에 빠져있을 경우 깨우기
+    
+    # 대기 상태인 경우 깨우기
+    manual_refresh_event.set()
     polling_thread.join(timeout=5)
     logging.info("DART Ingestion Service has been shut down.")
 
 if __name__ == "__main__":
     run_polling_service()
-
-
-
-# --End: Polling Logic--
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Celery configuration for producer
-app = Celery(
-    'producer',
-    broker='amqp://admin:password@rabbitmq:5672/',
-)
-
-# Celery configuration
-app.conf.update(
-    task_serializer='json',
-    accept_content=['json'],
-    result_serializer='json',
-    timezone='UTC',
-    enable_utc=True,
-)
-
-def mock_report_producer():
-    """Start the UUID generator that sends tasks every 1-2 seconds"""
-    logger.info("Starting UUID generator...")
-    
-    while True:
-        try:
-            # Generate UUID
-            task_uuid = str(uuid.uuid4())
-            logger.info(f"Generated UUID: {task_uuid}")
-            
-            # Send task to worker queue using the correct task name
-            result = app.send_task('tasks.summarize_report', args=[task_uuid])
-            logger.info(f"Task sent with ID: {result.id}")
-            
-            # Wait 1-2 seconds (random between 1000-2000ms)
-            import random
-            wait_time = random.uniform(1.0, 2.0)
-            time.sleep(wait_time)
-            
-        except Exception as e:
-            logger.error(f"Error in UUID generator: {e}")
-            time.sleep(1)
-
-if __name__ == "__main__":
-    mock_report_producer()

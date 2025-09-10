@@ -81,6 +81,7 @@ class DartApiClient:
 
     def fetch_company_profile(self, corp_code: str) -> Optional[Dict[str, Any]]:
         ''' 특정 기업 상세 정보 조회 메서드 '''
+        
         url = f"{self._BASE_URL}/company.json"
         params = {
             'crtfc_key': self.api_key,
@@ -102,7 +103,7 @@ class DartApiClient:
             return None
         
     def fetch_document_content(self, rcept_no: str) -> Optional[bytes]:
-        ''' 접수번호 기반 공시 원문(ZIP) 바이너리 데이터 조회 '''
+        ''' 접수번호 기반 공시 원문(ZIP) Binary Data 조회 '''
         
         url = f"{self._BASE_URL}/document.xml"
         params = {
@@ -112,7 +113,7 @@ class DartApiClient:
         try:
             response = self.session.get(url, params=params, timeout=self.timeout)
             response.raise_for_status()
-            # ZIP 파일이므로 디코딩 없이 순수 바이너리(bytes)를 그대로 반환
+            # Binary Data 반환
             return response.content            
         except requests.exceptions.RequestException as e:
             logging.error(f"Failed to fetch document for rcept_no {rcept_no}: {e}")

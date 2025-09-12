@@ -6,21 +6,32 @@
 
 ```
 dt-service-ingestion/
-├── producer/           # UUID 생성기
-│   ├── main.py        # 1-2초마다 UUID 생성 및 전송
-│   └── requirements.txt
-├── consumer/           # UUID 처리기
-│   ├── tasks.py       # UUID 처리 태스크
-│   ├── worker.py      # Worker 설정
-│   └── requirements.txt
-└── docker-compose.yml  # 전체 서비스 구성
+├── producer/                    # DART 공시 수집기
+│   ├── main.py                 # DART API 폴링 및 데이터 처리
+│   ├── requirements.txt
+│   ├── models/
+│   │   └── disclosure.py       # 공시 데이터 모델
+│   ├── services/
+│   │   ├── dart_api_client.py  # DART API 클라이언트
+│   │   └── storage_client.py   # MinIO 스토리지 클라이언트
+│   └── logs/
+├── consumer/                    # 공시 데이터 처리기  # TODO: git sub-module로 summary-service & knowledge-service 연결. abs class 정의 필요함
+│   ├── tasks.py                # 공시 요약 처리 태스크
+│   ├── worker.py               # Celery Worker 설정
+│   ├── requirements.txt
+│   └── logs/
+├── docker-compose.yml           # 전체 서비스 구성
+├── .env                        # 환경 변수 설정
+├── .env.example                # 환경 변수 템플릿
+└── .gitignore
 ```
 
 ## 서비스
 
-- **Producer**: UUID 생성 → RabbitMQ로 전송
-- **Consumer**: RabbitMQ에서 수신 → UUID 처리 → 로그 출력
+- **Producer**: DART API 폴링 → XML 처리 → MinIO 업로드 → Celery 작업 발행
+- **Consumer**: Celery 작업 수신 → 공시 데이터 요약 처리 → 로그 출력
 - **RabbitMQ**: 메시지 브로커 (관리 UI: http://localhost:15672)
+- **MinIO**: 객체 스토리지 (공시 XML 파일 저장)
 
 ## 실행 방법
 
@@ -51,7 +62,9 @@ docker-compose down
 
 ## 동작 흐름
 
-1. Producer가 1-2초마다 UUID 생성
-2. UUID를 RabbitMQ의 `tasks.summarize_report` 큐로 전송
-3. Consumer가 UUID를 수신하여 처리
-4. 처리 결과를 로그에 출력
+1. Producer가 DART API에서 최신 10개 공시 데이터 수집
+2. ZIP 압축 해제 및 XML 인코딩 처리
+3. 처리된 XML을 MinIO 객체 스토리지에 업로드
+4. 업로드 성공 시 `tasks.summarize_report` 작업을 RabbitMQ로 발행
+5. Consumer가 작업을 수신하여 공시 요약 처리
+6. 처리 결과를 로그에 출력

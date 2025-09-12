@@ -120,8 +120,8 @@ def polling_loop(dart_client: DartApiClient, storage_client: MinioClient, handle
             # 날짜 설정
             date_to_fetch = datetime.now(UTC).strftime('%Y%m%d')
             
-            logging.info(f"Fetching disclosures for {date_to_fetch}...")
-            disclosures = dart_client.fetch_disclosures(date_to_fetch)
+            logging.info(f"Fetching latest 10 disclosures for {date_to_fetch}...")
+            disclosures = dart_client.fetch_disclosures(date_to_fetch, limit=10)
 
             if not disclosures:
                 logging.info("No disclosures found in this cycle.")
@@ -169,15 +169,11 @@ def polling_loop(dart_client: DartApiClient, storage_client: MinioClient, handle
                             xml_str = re.sub(r'(<\?xml[^>]*encoding=")[^"]*(")', r'\1UTF-8\2', xml_str, count=1, flags=re.IGNORECASE)
                             final_content_bytes = xml_str.encode('utf-8')
                             
-                            # XML 유효성 검사 
-                            try:
-                                # 최종 생성된 데이터가 올바른 XML 형식인지 파싱을 시도하여 검증
-                                ET.fromstring(final_content_bytes)
-                            except ET.ParseError as pe:
-                                # 파싱 실패 시, 이 파일은 문제가 있음을 기록하고 후속 처리에서 제외
-                                logging.error(f" > XML validation failed for {disclosure.rcept_no}. Skipping. Error: {pe}")
-                                processed_rcept_nos.add(disclosure.rcept_no)
-                                continue
+                            # 기본적인 데이터 유효성 확인 (파일 크기, 내용 존재)
+                            if len(final_content_bytes) > 100:  # 최소 100바이트 이상
+                                logging.info(f" > Document processed successfully for {disclosure.rcept_no} ({len(final_content_bytes)} bytes)")
+                            else:
+                                logging.warning(f" > Document too small for {disclosure.rcept_no} ({len(final_content_bytes)} bytes)")
 
                             object_name = f"{disclosure.rcept_dt}/{disclosure.rcept_no}.xml"
                             

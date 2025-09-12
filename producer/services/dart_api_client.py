@@ -34,50 +34,40 @@ class DartApiClient:
         session.mount("https://", adapter)
         return session
 
-    def fetch_disclosures(self, date: str) -> Optional[List[Disclosure]]:
-        ''' 특정 날짜의 모든 공시 리스트 페이지네이션 통해 가져오는 메서드 '''
+    def fetch_disclosures(self, date: str, limit: int = 100) -> Optional[List[Disclosure]]:
+        ''' 특정 날짜의 공시 리스트 가져오는 메서드 (limit으로 개수 제한 가능) '''
         
-        all_disclosures_data = []
-        page_no = 1
-        total_pages = 1 
+        url = f"{self._BASE_URL}/list.json"
+        params = {
+            'crtfc_key': self.api_key,
+            'bgn_de': date,
+            'end_de': date,
+            'page_no': 1,
+            'page_count': min(limit, 100)  # 최대 100개까지만 한 번에 요청 가능
+        }
+        
+        try:
+            response = self.session.get(url, params=params, timeout=self.timeout)
+            response.raise_for_status()
+            data = response.json()
 
-        while page_no <= total_pages:
-            url = f"{self._BASE_URL}/list.json"
-            params = {
-                'crtfc_key': self.api_key,
-                'bgn_de': date,
-                'end_de': date,
-                'page_no': page_no,
-                'page_count': 100
-            }
-            
-            try:
-                response = self.session.get(url, params=params, timeout=self.timeout)
-                response.raise_for_status()
-                data = response.json()
-
-                if data.get('status') != '000':
-                    if data.get('status') == '013':
-                        logging.info(f"No disclosures found for date: {date}")
-                        break 
-                    logging.error(f"DART API Error: {data.get('status')} - {data.get('message')}")
-                    return None
-
-                if page_no == 1:
-                    total_pages = data.get('total_page', 1)
-
-                page_disclosures = data.get('list', [])
-                if not page_disclosures:
-                    break
-
-                all_disclosures_data.extend(page_disclosures)
-                page_no += 1
-
-            except (requests.exceptions.RequestException, ValueError) as e:
-                logging.error(f"An error occurred during API call for page {page_no}: {e}")
+            if data.get('status') != '000':
+                if data.get('status') == '013':
+                    logging.info(f"No disclosures found for date: {date}")
+                    return []
+                logging.error(f"DART API Error: {data.get('status')} - {data.get('message')}")
                 return None
-        
-        return [Disclosure.from_dict(item) for item in all_disclosures_data]
+
+            page_disclosures = data.get('list', [])
+            if not page_disclosures:
+                return []
+
+            # limit만큼만 반환
+            return [Disclosure.from_dict(item) for item in page_disclosures[:limit]]
+
+        except (requests.exceptions.RequestException, ValueError) as e:
+            logging.error(f"An error occurred during API call: {e}")
+            return None
 
     def fetch_company_profile(self, corp_code: str) -> Optional[Dict[str, Any]]:
         ''' 특정 기업 상세 정보 조회 메서드 '''

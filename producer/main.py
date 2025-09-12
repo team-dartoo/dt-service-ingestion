@@ -1,18 +1,3 @@
-'''
-- DART 폴링 및 Celery 작업 발행 메인 모듈
-
-** 역할 **
-	- Ingestion Service: DART Open API에서 주기적으로 신규 공시를 수집
-	- Producer: 수집하여 Minio에 저장한 공시 파일의 경로(`object_name`)를
-	        Celery 작업 큐로 전송하여 비동기 후속 처리를 요청
-
-** 구성 요소 **
-	- Config: 환경변수 및 설정 관리
-	- SignalHandler: 안정적인 서비스 종료(Graceful Shutdown) 처리
-	- polling_loop: 핵심 데이터 수집 및 Celery 작업 발행 로직
-	- run_polling_service: 전체 서비스 실행 및 스레드 관리
-'''
-
 import os
 import io
 import re                                   # XML 인코딩 선언문 수정
@@ -64,7 +49,7 @@ class Config:
 # 로깅 설정
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(threadName)s | %(message)s"
+    format="\t%(asctime)s \n\t %(levelname)s | %(threadName)s \n\t\t %(message)s"
 )
 
 # Graceful Shutdown Handler
@@ -80,30 +65,23 @@ class SignalHandler:
             self.shutdown_requested = True
 
 def handle_user_input(client: DartApiClient, handler: SignalHandler, refresh_event: threading.Event):
-    ''' 사용자 입력을 받아 기업 상세 정보 조회 또는 수동 갱신 신호 발생 '''
+    ''' 사용자 입력을 받아 수동 갱신 신호 발생 '''
     
     while not handler.shutdown_requested:
         try:
-            print("\n조회할 기업 코드 입력 (수동 갱신: '갱신', 종료: Ctrl+C): ", end='', flush=True)
+            # 수동 갱신
+            print("\nEnter \'re\' if you want a manual refresh (Exit: Ctrl+C):", end='', flush=True)
             user_input = input().strip()
             
-            if not user_input: continue
+            if not user_input: 
+                continue
             
-            if user_input == '갱신':
+            if user_input == 're':
                 logging.info("Manual refresh triggered by user.")
                 refresh_event.set()
                 continue
-
-            profile = client.fetch_company_profile(user_input)
-            
-            if profile:
-                print("\n--- 기업 상세 정보 ---")
-                for key, value in profile.items():
-                    if key not in ['status', 'message']:
-                        print(f"{key}: {value}")
-                print("---------------------")
             else:
-                print(f" > [{user_input}]에 대한 정보를 가져오지 못했습니다.")
+                print(f"  > Unknown command: '{user_input}'. Please enter 'refresh' or Ctrl+C.")
 
         except (EOFError, KeyboardInterrupt):
             break

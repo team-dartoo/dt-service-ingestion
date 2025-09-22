@@ -69,29 +69,33 @@ class DartApiClient:
             logging.error(f"An error occurred during API call: {e}")
             return None
 
-    def fetch_company_profile(self, corp_code: str) -> Optional[Dict[str, Any]]:
-        ''' 특정 기업 상세 정보 조회 메서드 '''
+    #--------------------------------Strat: 현재 미사용 코드-------------------------------
+    
+    # def fetch_company_profile(self, corp_code: str) -> Optional[Dict[str, Any]]:
+    #     ''' 특정 기업 상세 정보 조회 메서드 '''
         
-        url = f"{self._BASE_URL}/company.json"
-        params = {
-            'crtfc_key': self.api_key,
-            'corp_code': corp_code
-        }
-        try:
-            response = self.session.get(url, params=params, timeout=self.timeout)
-            response.raise_for_status()
-            data = response.json()
+    #     url = f"{self._BASE_URL}/company.json"
+    #     params = {
+    #         'crtfc_key': self.api_key,
+    #         'corp_code': corp_code
+    #     }
+    #     try:
+    #         response = self.session.get(url, params=params, timeout=self.timeout)
+    #         response.raise_for_status()
+    #         data = response.json()
 
-            if data.get('status') != '000':
-                logging.error(f"DART API Error (Company Profile): {data.get('status')} - {data.get('message')}")
-                return None
+    #         if data.get('status') != '000':
+    #             logging.error(f"DART API Error (Company Profile): {data.get('status')} - {data.get('message')}")
+    #             return None
             
-            return data
+    #         return data
             
-        except (requests.exceptions.RequestException, ValueError) as e:
-            logging.error(f"An error occurred during company profile API call for {corp_code}: {e}")
-            return None
+    #     except (requests.exceptions.RequestException, ValueError) as e:
+    #         logging.error(f"An error occurred during company profile API call for {corp_code}: {e}")
+    #         return None
         
+    #--------------------------------End: 현재 미사용 코드-------------------------------
+
     def fetch_document_content(self, rcept_no: str) -> Optional[bytes]:
         ''' 접수번호 기반 공시 원문(ZIP) Binary Data 조회 '''
         

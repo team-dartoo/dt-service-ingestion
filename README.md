@@ -1,28 +1,32 @@
 # dt-service-ingestion
 
-간단한 Producer-Consumer 패턴의 UUID 처리 시스템
+Producer-Consumer 패턴의 UUID 처리 시스템
 
 ## 구조
 
 ```
 dt-service-ingestion/
-├── producer/                    # DART 공시 수집기
-│   ├── main.py                 # DART API 폴링 및 데이터 처리
+├── producer/                       # DART 공시 수집기
+│   ├── main.py                     # DART API 폴링 및 데이터 처리
 │   ├── requirements.txt
 │   ├── models/
-│   │   └── disclosure.py       # 공시 데이터 모델
+|   |   ├── disclosure.py           # 공시 데이터 모델
+│   │   └── failure_recorder.py     # 공시 폴링 실패 기록 저장  
 │   ├── services/
-│   │   ├── dart_api_client.py  # DART API 클라이언트
-│   │   └── storage_client.py   # MinIO 스토리지 클라이언트
+|   |   ├── content_normalizer.py   # 공시 문서 디코딩 & 재인코딩
+│   │   ├── dart_api_client.py      # DART API 클라이언트
+│   │   └── storage_client.py       # MinIO 스토리지 클라이언트
 │   └── logs/
-├── consumer/                    # 공시 데이터 처리기  # TODO: git sub-module로 summary-service & knowledge-service 연결. abs class 정의 필요함
-│   ├── tasks.py                # 공시 요약 처리 태스크
-│   ├── worker.py               # Celery Worker 설정
+|        └── failed_logs            # 실패한 공시 정보 JSON으로 저장
+|
+├── consumer/                       # 공시 데이터 처리기  # TODO: git sub-module로 summary-service & knowledge-service 연결. abs class 정의 필요함
+│   ├── tasks.py                    # 공시 요약 처리 태스크
+│   ├── worker.py                   # Celery Worker 설정
 │   ├── requirements.txt
 │   └── logs/
-├── docker-compose.yml           # 전체 서비스 구성
-├── .env                        # 환경 변수 설정
-├── .env.example                # 환경 변수 템플릿
+├── docker-compose.yml              # 전체 서비스 구성
+├── .env                            # 환경 변수 설정
+├── .env.example                    # 환경 변수 템플릿
 └── .gitignore
 ```
 

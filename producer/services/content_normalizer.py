@@ -1,128 +1,208 @@
-import os
-import re
-import unicodedata
-import logging
+import os, re, unicodedata, logging
 from io import BytesIO
 from zipfile import ZipFile, BadZipFile
-from typing import Tuple
+from typing import Tuple, Optional, List, Dict, Any
 
-# 상수 정의
-PDF_SIG = b'%PDF-'                                                  # PDF 파일의 시작값
-ZIP_SIG = b'PK\x03\x04'                                             # ZIP 파일의 시작값
-READ_HEAD_N = 4096                                                  # 파일 유형을 감지하기 위해 파일의 앞부분에서 읽는 바이트 수
-PICK_ORDER = ('.pdf', '.html', '.htm', '.xml')
+READ_HEAD_N = 65536
+PDF_SIG = b'%PDF-'
+ZIP_SIG = b'PK\x03\x04'
 
-_CHARSET_RE = re.compile(rb'(?i)charset\s*=\s*([a-zA-Z0-9_-]+)')    # 'charset' 탐색 정규식
-
-_CODEC_MAP = {
-    "euc-kr": "cp949", "ks_c_5601-1987": "cp949", "ksc5601": "cp949"
+KIND_PRIORITY = ['html', 'xml', 'bin']
+MAX_FILES = 200
+MAX_TOTAL_UNCOMPRESSED = 200 * 1024 * 1024
+_ALIAS = {
+    'ks_c_5601-1987': 'cp949', 'ks_c_5601': 'cp949',
+    'x-windows-949': 'cp949', 'windows-949': 'cp949',
+    'euckr': 'euc-kr', 'euc_kr': 'euc-kr',
+    'utf8': 'utf-8', 'utf-8-sig': 'utf-8-sig',
 }
+_HTML_TAG_RE = re.compile(rb'(?is)<html[^>]*>')
+_HTML_DOCTYPE_RE = re.compile(rb'(?is)<!doctype\s+html')
+_HEAD_RE = re.compile(rb'(?is)<head[^>]*>')
+_META_ANY_RE = re.compile(
+    rb'(?is)<meta[^>]+(?:charset\s*=|http-equiv\s*=\s*["\']content-type["\'][^>]*content\s*=\s*["\']text/html;\s*charset=)'
+)
+_DOCTYPE_RE = re.compile(rb'(?is)\A\s*<!doctype[^>]*>\s*')
+_XML_DECL_RE = re.compile(rb'(?is)<\?xml[^>]+encoding\s*=\s*["\']?([a-zA-Z0-9._-]+)')
+_XML_DECL_REPL = re.compile(rb'^<\?xml[^>]*\?>')
+_HTML_META_TAG_RE = re.compile(rb'(?is)<meta[^>]+charset\s*=\s*["\']?([a-zA-Z0-9._-]+)')
+_HTML_HTTP_EQUIV_RE = re.compile(
+    rb'(?is)<meta[^>]+http-equiv\s*=\s*["\']content-type["\'][^>]*content\s*=\s*["\']text/html;\s*charset=([a-zA-Z0-9._-]+)[^"\']*["\']'
+)
+_SAFE_NAME_RE = re.compile(r'[^A-Za-z0-9._-]+')
 
-# 유틸리티 함수
 def _normalize_name(name: str) -> str:
-    '''
-    파일명 정리
-    - 경로 제거 & 파일명 사용
-    - 유니코드 정규화(NFC)
-    '''
-    base = os.path.basename(name).strip()
-    return unicodedata.normalize('NFC', base)
+    return unicodedata.normalize('NFC', os.path.basename(name).strip())
 
-def _get_base_name(filename: str) -> str:                           # 파일명에서 확장자를 제거한 순수 이름 반환
+def _safe_ascii_name(name: str) -> str:
+    n = unicodedata.normalize('NFKD', name).encode('ascii', 'ignore').decode('ascii')
+    n = _SAFE_NAME_RE.sub('_', n).strip('._-')
+    return n or 'document'
+
+def _get_base_name(filename: str) -> str:
     return os.path.splitext(_normalize_name(filename))[0]
 
-def _detect_charset(head_bytes: bytes) -> str | None:               # 문서 앞부분에서 문자 인코딩 감지
-    match = _CHARSET_RE.search(head_bytes)
-    if match:
-        charset = match.group(1).decode('ascii', errors='ignore').lower()   # 정규식으로 찾은 인코딩을 ascii코드로 디코딩
-        return _CODEC_MAP.get(charset, charset)                             # _CODEC_MAP을 참조하여 표준 코덱 이름으로 변환
+def _canon(enc: Optional[str]) -> Optional[str]:
+    if not enc: return None
+    return _ALIAS.get(enc.strip().lower(), enc.strip().lower())
+
+def sniff_kind(buf: bytes) -> str:
+    head = buf[:READ_HEAD_N]
+    if _HTML_TAG_RE.search(head) or _HTML_DOCTYPE_RE.search(head) or _META_ANY_RE.search(head) or _HEAD_RE.search(head):
+        return 'html'
+    if head.lstrip().startswith(b'<?xml'): return 'xml'
+    return 'bin'
+
+def _detect_encoding(buf: bytes) -> Optional[str]:
+    head = buf[:READ_HEAD_N]
+    m = _XML_DECL_RE.search(head)
+    if m: return _canon(m.group(1).decode('ascii', 'ignore'))
+    m = _HTML_META_TAG_RE.search(head)
+    if m: return _canon(m.group(1).decode('ascii', 'ignore'))
+    m = _HTML_HTTP_EQUIV_RE.search(head)
+    if m: return _canon(m.group(1).decode('ascii', 'ignore'))
     return None
 
-def sniff_type(blob: bytes) -> str:
-    head = blob[:READ_HEAD_N]
-    if head.startswith(PDF_SIG): return 'pdf'
-    if head.startswith(ZIP_SIG): return 'zip'
-    
-    text_head = head.lstrip()                                       # 텍스트 기반 파일 감지
-    if text_head.startswith(b'\xef\xbb\xbf'):                       # UTF-8 BOM
-        text_head = text_head[3:]
-    
-    if re.match(b'\\s*<!doctype html|<html', text_head, re.IGNORECASE): return 'html'   # html 판단
-    if re.match(b'\\s*<\\?xml', text_head, re.IGNORECASE): return 'xml'                 # xml 판단
-    
-    return 'bin'                                                    # 위 조건 미충족시, binary file로 판단
+def _rewrite_decl_to_utf8(kind: str, b: bytes) -> bytes:
+    if kind == 'html':
+        had = False
+        if _HTML_META_TAG_RE.search(b):
+            had = True
+            b = _HTML_META_TAG_RE.sub(b'<meta charset="UTF-8">', b, count=0)
+        if _HTML_HTTP_EQUIV_RE.search(b):
+            had = True
+            b = _HTML_HTTP_EQUIV_RE.sub(b'<meta charset="UTF-8">', b, count=0)
+        if not had:
+            m = _HEAD_RE.search(b)
+            if m:
+                b = b[:m.end()] + b'\n<meta charset="UTF-8">' + b[m.end():]
+            else:
+                m2 = _DOCTYPE_RE.search(b)
+                if m2:
+                    b = b[:m2.end()] + b'\n<meta charset="UTF-8">' + b[m2.end():]
+                else:
+                    b = b'<meta charset="UTF-8">\n' + b
+        b = re.sub(rb'(?is)(<meta\s+charset="UTF-8">\s*){2,}', b'<meta charset="UTF-8">', b)
+        return b
+    if kind == 'xml':
+        if _XML_DECL_REPL.search(b):
+            return _XML_DECL_REPL.sub(b'<?xml version="1.0" encoding="UTF-8"?>', b, count=1)
+        return b'<?xml version="1.0" encoding="UTF-8"?>\n' + b
+    return b
 
-def _transcode_to_utf8(raw_bytes: bytes) -> bytes:                  # 원본 바이트를 UTF-8로 트랜스코딩
-    detected = _detect_charset(raw_bytes[:READ_HEAD_N])             # 1. 문서에 명시된 인코딩 감지
-    encodings_to_try = ['euc-kr' ,'utf-8', detected, 'cp949']       # 2. 디코딩 순서 정의
-    
-    decoded_text = None
-    for enc in filter(None, encodings_to_try):                      # 3. 유효한 인코딩만 시도
+def _decode_candidates(detected: Optional[str]) -> List[str]:
+    base = [_canon(detected), 'utf-8-sig', 'utf-8', 'cp949', 'euc-kr', 'windows-1252', 'iso-8859-1']
+    out: List[str] = []
+    for enc in base:
+        if enc and enc not in out: out.append(enc)
+    return out
+
+def _to_utf8_with_rewrite(buf: bytes, kind: str) -> bytes:
+    det = _detect_encoding(buf)
+    for enc in _decode_candidates(det):
         try:
-            decoded_text = raw_bytes.decode(enc, errors='strict')   # 4. Strict 모드로 디코딩 시도
-            break
-        except (UnicodeDecodeError, LookupError):                   # 5. 해당 인코딩으로 디코딩 실패 시 다음 후보로 전환
+            txt = buf.decode(enc, 'strict')
+            out = txt.encode('utf-8', 'strict')
+            out = _rewrite_decl_to_utf8(kind, out)
+            out.decode('utf-8', 'strict')
+            return out
+        except Exception:
             continue
-    
-    if decoded_text is None:                                        # 6. 모든 시도 실패할 경우, 대체문자를 사용하여 강제 변환
-        decoded_text = raw_bytes.decode('utf-8', errors='replace') 
+    logging.warning(f"strict decode failed for {kind}; fallback with replacements")
+    try:
+        txt = buf.decode('cp949', 'replace'); used = 'cp949'
+    except Exception:
+        txt = buf.decode('utf-8', 'replace'); used = 'utf-8'
+    out = txt.encode('utf-8')
+    out = _rewrite_decl_to_utf8(kind, out)
+    logging.warning(f"{kind} decoded with replacements as {used}")
+    return out
 
-    cleaned_text = re.sub(                                          # 7. UTF-8 선언으로 교체
-        r'(?i)<meta\s+http-equiv\s*=\s*["\']Content-Type["\'][^>]*>',
-        '<meta charset="utf-8">',
-        decoded_text
-    )
-    
-    if cleaned_text == decoded_text:                                # 8. 위 패턴이 없을 시, 다른 형태의 charset 선언을 찾아 교체
-        cleaned_text = re.sub(
-            r'(?i)<meta\s+charset\s*=\s*["\'][^"\']+["\']\s*\/?>',
-            '<meta charset="utf-8">',
-            cleaned_text
-        )
+def _safe_zip_members(zf: ZipFile):
+    infos = [i for i in zf.infolist() if not i.is_dir()]
+    if len(infos) > MAX_FILES: raise ValueError(f"too many files in zip: {len(infos)}")
+    total = sum(i.file_size for i in infos)
+    if total > MAX_TOTAL_UNCOMPRESSED: raise ValueError(f"zip too large: {total} bytes")
+    return infos
 
-    return cleaned_text.encode('utf-8')
+def _classify_member(zf: ZipFile, info) -> Tuple[str, bytes, str]:
+    name = info.filename
+    if not (info.flag_bits & 0x800):
+        try: name = name.encode('cp437').decode('cp949', 'ignore')
+        except Exception: pass
+    data = zf.read(info)
+    kind = sniff_kind(data)
+    return kind, data, _normalize_name(name)
 
-def _pick_and_normalize_from_zip(zip_bytes: bytes, base_name: str) -> Tuple[str, bytes, str]:
-    '''
-    ZIP 파일 압축 해제하고, 내부에 있는 파일을 추출하여 정규화
-    '''
+def _pick_best(members: List[Tuple[str, bytes, str]]) -> Tuple[str, bytes, str]:
+    members.sort(key=lambda t: (KIND_PRIORITY.index(t[0]) if t[0] in KIND_PRIORITY else len(KIND_PRIORITY), -len(t[1])))
+    return members[0]
+
+def _normalize_zip(base_name: str, zip_bytes: bytes) -> Tuple[str, bytes, str, str]:
     try:
         with ZipFile(BytesIO(zip_bytes)) as zf:
-            infos = [info for info in zf.infolist() if not info.is_dir()]
+            infos = _safe_zip_members(zf)
+            classified: List[Tuple[str, bytes, str]] = []
+            for i in infos:
+                kind, data, name = _classify_member(zf, i)
+                classified.append((kind, data, name))
+            if not classified: raise ValueError("empty zip")
+            kind, data, picked_name = _pick_best(classified)
             
-            for ext in PICK_ORDER:                                                              # 우선순위에 따라 파일 탐색
-                candidates = [info for info in infos if info.filename.lower().endswith(ext)]
-                if candidates:
-                    best_file = max(candidates, key=lambda f: f.file_size)                      # 후보가 여러 개일 경우, 가장 용량이 큰 파일 전택
-                    return normalize_payload(best_file.filename, zf.read(best_file.filename))   # [재귀호출] 추출한 파일도 재정규화
+            summary = f"ZIP({len(infos)} files) -> '{picked_name}' ({kind})"
             
-            if infos:
-                largest = max(infos, key=lambda f: f.file_size)
-                return 'application/octet-stream', zf.read(largest.filename), _normalize_name(largest.filename)
-            raise ValueError("No processable files found in ZIP.")
-            
-    except (BadZipFile, ValueError) as e:                                                       # ZIP 파일 손상되었거나 처리 중 오류 발생 시, 바이너리로 변환
-        logging.warning(f"Failed to process ZIP for {base_name}: {e}")
-        return 'application/octet-stream', zip_bytes, f"{base_name}.zip"
+            if kind == 'html':
+                return 'text/html; charset=UTF-8', _to_utf8_with_rewrite(data, 'html'), f'{base_name}.html', summary
+            if kind == 'xml':
+                return 'application/xml; charset=UTF-8', _to_utf8_with_rewrite(data, 'xml'), f'{base_name}.xml', summary
+            # bin
+            return 'application/octet-stream', data, base_name, summary
+    except (BadZipFile, ValueError) as e:
+        logging.warning(f"zip normalize fail: {e}")
+        return 'application/octet-stream', zip_bytes, f'{base_name}.zip', "ZIP(failed)"
 
-def normalize_payload(object_key: str, body: bytes) -> Tuple[str, bytes, str]:
-    '''
-    파일 유형을 판별하고, 각 유형에 맞는 처리 함수로 작업 분기
-    
-    Args:
-        object_key (str): 문서의 고유 식별자 (예: 접수번호 '20250924000123')
-        body (bytes): 문서의 원본 데이터 바이트
-    '''
-    file_type = sniff_type(body)                # 1. 파일 유형 확인
-    base_name = _get_base_name(object_key)      # 2. 파일명 정규화
+def normalize_payload(
+    object_key: str,
+    body: bytes,
+    log_context: Optional[Dict[str, Any]] = None
+) -> Tuple[str, bytes, str]:
 
-    if file_type == 'pdf':                      # 3. 파일 유형에 따라 적절한 처리 로직 실행
-        return 'application/pdf', body, f"{base_name}.pdf"
-    if file_type == 'zip':
-        return _pick_and_normalize_from_zip(body, base_name)
-    if file_type == 'html':
-        return 'text/html; charset=UTF-8', _transcode_to_utf8(body), f"{base_name}.html"
-    if file_type == 'xml':
-        return 'application/xml; charset=UTF-8', _transcode_to_utf8(body), f"{base_name}.xml"
-    
-    return 'application/octet-stream', body, f"{base_name}.bin"
+    base_name = _safe_ascii_name(_get_base_name(object_key))
+    kind = sniff_kind(body) 
+    final_summary = f"Detected as '{kind}'"
+
+    if body.startswith(ZIP_SIG):
+        kind = 'zip'
+        
+    if kind == 'zip':
+        content_type, norm_bytes, final_name, summary = _normalize_zip(base_name, body)
+        final_summary = summary
+    elif kind == 'html':
+        content_type, norm_bytes, final_name = 'text/html; charset=UTF-8', _to_utf8_with_rewrite(body, 'html'), f'{base_name}.html'
+    elif kind == 'xml':
+        content_type, norm_bytes, final_name = 'application/xml; charset=UTF-8', _to_utf8_with_rewrite(body, 'xml'), f'{base_name}.xml'
+    else: 
+        content_type, norm_bytes, final_name = 'application/octet-stream', body, base_name
+
+    if log_context:
+        polling_date = log_context.get('polling_date', '-')
+        rcept_date = log_context.get('rcept_dt', '-')
+        
+        date_info = rcept_date
+        if polling_date != rcept_date:
+            date_info += f" (Polled on {polling_date})"
+
+        report_name = log_context.get('report_nm', '-')
+        corp_name = log_context.get('corp_name', '-')
+        
+        log_msg = (
+            f"Processed | "
+            f"{date_info:<30} | "
+            f"[{corp_name:<15}] | "
+            f"{report_name:<50} | "
+            f"Saved as '{final_name}' ({final_summary})"
+        )
+        logging.info(log_msg)
+
+    return content_type, norm_bytes, final_name
+

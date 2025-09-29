@@ -19,6 +19,8 @@ services:
       context: .
       dockerfile: Dockerfile.producer
     container_name: dt-producer
+    env_file:
+      - .env
     environment:
       - CELERY_BROKER_URL=amqp://admin:password@rabbitmq:5672/
     volumes:

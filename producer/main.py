@@ -222,13 +222,12 @@ if __name__ == "__main__":
         )
         handler = SignalHandler()
 
-        poll_interval_str = (os.getenv("POLL_INTERVAL"), "300")                               # 폴링 주기 결정 (기본 300초)
-        
+        poll_interval_str = os.getenv("POLL_INTERVAL", "300")
         try:
             interval = int(poll_interval_str)
         except ValueError:
             LOG.warning(
-                f"Invalid poll interval '{poll_interval_str}', falling back to 300 seconds."
+                f"Invalid POLL_INTERVAL '{poll_interval_str}', falling back to 300 seconds."
             )
             interval = 300
         

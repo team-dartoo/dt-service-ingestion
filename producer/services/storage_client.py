@@ -36,8 +36,16 @@ class MinIOClient:
     # ---------- 특정 객체(파일)가 버킷에 이미 존재하는지 확인 ----------
     def object_exists(self, object_name: str) -> bool:
         try:
+            if '*' in object_name:                                            # 와일드카드(*)가 포함된 객체 이름 처리
+                prefix = object_name.split('*', 1)[0]                         # 와일드카드 앞부분을 접두사로 사용
+                objects = self.client.list_objects(self.bucket_name, prefix=prefix, recursive=True)
+                for _ in objects:
+                    return True
+                return False
+            
             self.client.stat_object(self.bucket_name, object_name)              # 객체의 메타데이터 요청
             return True                                                         # 성공 시 객체가 존재함을 의미
+        
         except S3Error as e:
             if e.code == 'NoSuchKey':                                           # 'NoSuchKey' 에러는 객체가 존재하지 않음을 의미
                 return False

@@ -47,7 +47,7 @@ docker network create dt-network
 2. **빌드 및 실행**
 ```bash
 docker-compose build
-docker-compose up
+docker-compose up       # OR: docker-compose up -d
 ```
 
 3. **로그 확인**

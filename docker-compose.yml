@@ -3,15 +3,21 @@ version: '3.8'
 services:
   # RabbitMQ Message Broker
   rabbitmq:
-    image: rabbitmq:4
+    image: rabbitmq:4-management
     container_name: dt-rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: admin
       RABBITMQ_DEFAULT_PASS: password
     ports:
-      - "15672:15672"   # Management UI (optional)
+      - "5672:5672"
+      - "15672:15672"
     networks:
       - dt-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   # MinIO Object Storage
   minio:
@@ -24,12 +30,17 @@ services:
     volumes:
       - minio-data:/data
     ports:
-      - "9000:9000"   # S3 API
-      - "9001:9001"   # MinIO Console
+      - "9000:9000"
+      - "9001:9001"
     networks:
       - dt-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
-  # Producer Service (Ingestion)
+  # Producer Service (DART API 폴링)
   producer:
     build:
       context: .
@@ -41,12 +52,15 @@ services:
       - ./producer:/app
       - ./logs:/app/logs
     depends_on:
-      - rabbitmq
-      - minio
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     networks:
       - dt-network
+    restart: unless-stopped
 
-  # Consumer Service (Worker)
+  # Consumer Service (Disclosure API 호출)
   consumer:
     build:
       context: .
@@ -58,10 +72,11 @@ services:
       - ./consumer:/app
       - ./logs:/app/logs
     depends_on:
-      - rabbitmq
-      - minio
+      rabbitmq:
+        condition: service_healthy
     networks:
       - dt-network
+    restart: unless-stopped
 
 networks:
   dt-network:

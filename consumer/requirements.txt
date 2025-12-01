@@ -1,3 +1,9 @@
 # Consumer requirements
 celery==5.3.4
 python-dotenv==1.0.0
+
+# HTTP Client for Disclosure Service API calls
+httpx==0.25.2
+
+# Async support
+aiohttp==3.9.1

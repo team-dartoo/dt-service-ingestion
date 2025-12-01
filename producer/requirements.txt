@@ -3,3 +3,7 @@ celery==5.3.4
 python-dotenv==1.0.0
 requests==2.32.5
 minio==7.2.16
+
+chardet>=5.0.0              # 인코딩 자동 감지
+beautifulsoup4>=4.12.0      # HTML 파싱
+lxml>=5.0.0                 # XML 파싱 (고성능, 선택적)

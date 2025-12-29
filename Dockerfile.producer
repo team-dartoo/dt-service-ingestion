@@ -1,7 +1,14 @@
-# Dockerfile for Producer (UUID Generator)
+# Dockerfile for Producer (개선 버전)
+# 헬스체크 엔드포인트 추가
+
 FROM python:3.11-slim
 
 WORKDIR /app
+
+# 시스템 의존성 설치 (curl for healthcheck)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy and install requirements
 COPY producer/requirements.txt .
@@ -10,4 +17,18 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy producer code
 COPY producer/ /app/
 
+# 환경 변수 기본값
+ENV HEALTH_ENABLED=true
+ENV HEALTH_PORT=8001
+ENV LOG_LEVEL=INFO
+
+# 헬스체크 포트 노출
+EXPOSE 8001
+
+# 헬스체크 설정
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8001/health/live || exit 1
+
+# main_improved.py 실행 (개선된 버전)
+# 기존 main.py를 사용하려면 CMD ["python", "main.py"]로 변경
 CMD ["python", "main.py"]

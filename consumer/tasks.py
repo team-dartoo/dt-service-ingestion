@@ -319,16 +319,5 @@ def process_disclosure(
         }
 
 
-# 하위 호환성을 위한 기존 태스크 이름 유지 (deprecated)
-@app.task(name="tasks.summarize_report")
-def summarize_report(**kwargs):
-    """
-    [DEPRECATED] 기존 태스크 이름 호환성 유지.
-    
-    새로운 구현에서는 tasks.process_disclosure를 사용하세요.
-    """
-    logger.warning(
-        "tasks.summarize_report is deprecated. "
-        "Use tasks.process_disclosure instead."
-    )
-    return process_disclosure.delay(**kwargs)
+# NOTE: 기존 tasks.summarize_report 태스크는 제거되었습니다.
+# 새로운 구현에서는 tasks.process_disclosure를 사용하세요.

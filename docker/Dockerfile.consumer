@@ -1,4 +1,7 @@
-# Dockerfile for Consumer (Worker)
+# ============================================================
+# Dockerfile for Consumer (Celery Worker)
+# ============================================================
+
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -10,4 +13,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy consumer code
 COPY consumer/ /app/
 
+# 환경 변수 기본값
+ENV LOG_LEVEL=INFO
+ENV CELERY_CONCURRENCY=2
+
+# Celery Worker 실행
 CMD ["python", "-m", "celery", "-A", "worker", "worker", "--loglevel=info", "--concurrency=2"]

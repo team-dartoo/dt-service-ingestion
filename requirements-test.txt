@@ -1,0 +1,22 @@
+# ============================================================
+# Ingestion Service - Test Dependencies
+# ============================================================
+# 테스트 실행을 위한 의존성
+#
+# 설치: pip install -r requirements-test.txt
+# 테스트 실행: pytest
+# ============================================================
+
+# Producer dependencies
+-r producer/requirements.txt
+
+# Consumer dependencies  
+-r consumer/requirements.txt
+
+# Testing
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+
+# Mocking
+responses==0.24.1

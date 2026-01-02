@@ -1,5 +1,6 @@
-# Dockerfile for Producer (개선 버전)
-# 헬스체크 엔드포인트 추가
+# ============================================================
+# Dockerfile for Producer (DART API Polling Service)
+# ============================================================
 
 FROM python:3.11-slim
 
@@ -29,6 +30,5 @@ EXPOSE 8001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8001/health/live || exit 1
 
-# main_improved.py 실행 (개선된 버전)
-# 기존 main.py를 사용하려면 CMD ["python", "main.py"]로 변경
+# main.py 실행
 CMD ["python", "main.py"]

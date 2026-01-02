@@ -1,11 +1,15 @@
 # ============================================================
-# Ingestion Service - Git 추적 제외 파일
+# Ingestion Service - Docker Build 제외 파일
 # ============================================================
 
-# Environment (민감 정보 포함)
+# Git
+.git
+.gitignore
+
+# Environment (빌드 시 제외, docker-compose에서 env_file로 주입)
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # Python
 __pycache__/
@@ -13,21 +17,11 @@ __pycache__/
 *$py.class
 *.so
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
 *.egg
+.eggs/
+dist/
+build/
 
 # Virtual environments
 .venv/
@@ -40,10 +34,6 @@ env/
 .vscode/
 *.swp
 *.swo
-*~
-.project
-.pydevproject
-.settings/
 
 # Testing
 .pytest_cache/
@@ -51,9 +41,17 @@ env/
 htmlcov/
 .tox/
 .nox/
-coverage.xml
-*.cover
-*.py,cover
+tests/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+docker/
 
 # Logs
 logs/
@@ -62,17 +60,9 @@ failed_disclosures/
 
 # OS
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
 
-# Docker (로컬 데이터)
-*.tar
-
-# Temporary files
+# Temporary
 tmp/
 temp/
 *.tmp

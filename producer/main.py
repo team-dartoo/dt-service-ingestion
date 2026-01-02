@@ -32,6 +32,7 @@ from celery import Celery
 from config import get_config, AppConfig, ConfigValidationError
 from health import start_health_server, HealthCheckServer
 from services.dart_api_client import DartApiClient, DartApiError, DartApiStatus
+from services.mock_dart_client import MockDartApiClient, get_dart_client
 from services.storage_client import MinIOClient
 from services.content_normalizer import normalize_payload
 from models.disclosure import Disclosure
@@ -490,11 +491,13 @@ def main():
     
     # 5. 클라이언트 초기화
     try:
-        api = DartApiClient(
-            api_key=config.dart.api_key,
-            timeout=config.dart.timeout,
-        )
-        logger.info("DART API client initialized")
+        # Mock 모드 또는 실제 DART API 클라이언트 선택
+        api = get_dart_client(config)
+        
+        if config.dart.mock_mode:
+            logger.info("🧪 MOCK DART API client initialized")
+        else:
+            logger.info("DART API client initialized")
         
         if health_server:
             health_server.set_dart_client(api)

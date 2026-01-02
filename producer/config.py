@@ -43,10 +43,15 @@ class DartApiConfig:
     base_url: str = "https://opendart.fss.or.kr/api"
     timeout: int = 30
     max_retries: int = 5
+    mock_mode: bool = False  # Mock 모드 활성화
     
     def validate(self) -> List[str]:
         """설정 유효성 검증"""
         errors = []
+        
+        # Mock 모드일 때는 API Key 검증 스킵
+        if self.mock_mode:
+            return errors
         
         if not self.api_key:
             errors.append("DART_API_KEY is empty")
@@ -288,14 +293,26 @@ def load_config() -> AppConfig:
     Raises:
         ConfigValidationError: 필수 환경 변수 누락 시
     """
-    # 필수 환경 변수 확인
-    required_vars = [
-        "DART_API_KEY",
-        "MINIO_ENDPOINT",
-        "MINIO_ACCESS_KEY", 
-        "MINIO_SECRET_KEY",
-        "CELERY_BROKER_URL",
-    ]
+    # Mock 모드 확인
+    mock_mode = _get_env_bool("MOCK_MODE", False)
+    
+    # 필수 환경 변수 확인 (Mock 모드일 때는 DART_API_KEY 제외)
+    if mock_mode:
+        required_vars = [
+            "MINIO_ENDPOINT",
+            "MINIO_ACCESS_KEY", 
+            "MINIO_SECRET_KEY",
+            "CELERY_BROKER_URL",
+        ]
+        logger.info("🧪 MOCK_MODE enabled - DART API Key not required")
+    else:
+        required_vars = [
+            "DART_API_KEY",
+            "MINIO_ENDPOINT",
+            "MINIO_ACCESS_KEY", 
+            "MINIO_SECRET_KEY",
+            "CELERY_BROKER_URL",
+        ]
     
     missing = [var for var in required_vars if not _get_env(var)]
     if missing:
@@ -304,9 +321,10 @@ def load_config() -> AppConfig:
     # 설정 객체 생성
     config = AppConfig(
         dart=DartApiConfig(
-            api_key=_get_env("DART_API_KEY", ""),
+            api_key=_get_env("DART_API_KEY", "mock-api-key-for-testing-only"),
             timeout=_get_env_int("DART_TIMEOUT", 30),
             max_retries=_get_env_int("DART_MAX_RETRIES", 5),
+            mock_mode=mock_mode,
         ),
         minio=MinioConfig(
             endpoint=_get_env("MINIO_ENDPOINT", ""),

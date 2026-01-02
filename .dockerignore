@@ -1,0 +1,73 @@
+# ============================================================
+# Ingestion Service - Docker Build 제외 파일
+# ============================================================
+
+# Git
+.git
+.gitignore
+
+# Environment (빌드 시 제외, docker-compose에서 env_file로 주입)
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+.eggs/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+tests/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+docker/
+
+# Logs
+logs/
+*.log
+failed_disclosures/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary
+tmp/
+temp/
+*.tmp
+*.bak
+
+# Celery
+celerybeat-schedule
+celerybeat.pid

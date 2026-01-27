@@ -142,7 +142,7 @@ services:
       # Celery/RabbitMQ (컨테이너명 사용)
       CELERY_BROKER_URL: amqp://${RABBITMQ_USER:-admin}:${RABBITMQ_PASSWORD:-admin123}@ingestion-rabbitmq:5672/
       # Disclosure Service (dartoo-network를 통해 접근)
-      DISCLOSURE_SERVICE_URL: http://disclosure-api:8000
+      DISCLOSURE_SERVICE_URL: http://disclosure-service:8000
     depends_on:
       rabbitmq:
         condition: service_healthy

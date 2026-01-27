@@ -52,7 +52,7 @@ class DisclosureServiceClient:
     """
     Disclosure Service와 통신하는 HTTP 클라이언트.
     
-    PUT /api/v1/disclosures/{rcept_no} 엔드포인트를 호출하여
+    PUT /api/disclosures/{rcept_no} 엔드포인트를 호출하여
     공시 정보를 생성/업데이트한다.
     """
     
@@ -95,7 +95,7 @@ class DisclosureServiceClient:
         Raises:
             httpx.HTTPError: HTTP 요청 실패 시
         """
-        url = f"{self.base_url}/api/v1/disclosures/{rcept_no}"
+        url = f"{self.base_url}/api/disclosures/{rcept_no}"
         
         # Celery 메시지를 Disclosure Service API 스키마에 맞게 변환
         payload = {

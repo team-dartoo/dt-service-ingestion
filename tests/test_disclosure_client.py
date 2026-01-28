@@ -55,7 +55,7 @@ class TestDisclosureServiceClient:
         headers = client._get_headers()
         
         assert headers["Content-Type"] == "application/json"
-        assert headers["X-Worker-Api-Key"] == "test-api-key"
+        assert headers["X-Worker-API-Key"] == "test-api-key"
     
     def test_missing_api_key_warning(self, caplog):
         """API Key 누락 시 경고"""
@@ -206,10 +206,11 @@ class TestPayloadBuilding:
         payload = call_args.kwargs.get("json") or call_args[1].get("json")
         
         # 필수 필드 확인
-        assert payload["rcept_no"] == sample_disclosure_message["rcept_no"]
-        assert payload["corp_code"] == sample_disclosure_message["corp_code"]
-        assert payload["corp_name"] == sample_disclosure_message["corp_name"]
-        assert payload["minio_object_name"] == sample_disclosure_message["object_key"]
+        assert payload["reportName"] == sample_disclosure_message["report_nm"]
+        assert payload["corpCode"] == sample_disclosure_message["corp_code"]
+        assert payload["corpName"] == sample_disclosure_message["corp_name"]
+        assert payload["minioObjectName"] == sample_disclosure_message["object_key"]
+        assert payload["receptionDate"] == "2024-12-29T00:00:00Z"
 
 
 class TestRetryLogic:

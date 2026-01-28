@@ -25,6 +25,7 @@ Disclosure Service의 PUT API를 호출해 공시 정보를 저장한다.
 import os
 import logging
 import time
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 
 import httpx
@@ -78,9 +79,29 @@ class DisclosureServiceClient:
         """API 요청 헤더 생성"""
         return {
             "Content-Type": "application/json",
-            "X-Worker-Api-Key": self.api_key,
+            "X-Worker-API-Key": self.api_key,
         }
-    
+
+    def _format_reception_date(self, rcept_dt: Optional[str]) -> Optional[str]:
+        """DART 접수일자(YYYYMMDD)를 ISO 8601 date-time으로 변환"""
+        if rcept_dt is None:
+            return None
+        value = str(rcept_dt).strip()
+        if not value:
+            return None
+        if len(value) == 8 and value.isdigit():
+            dt = datetime.strptime(value, "%Y%m%d").replace(tzinfo=timezone.utc)
+            return dt.isoformat().replace("+00:00", "Z")
+        if len(value) == 10 and value[4] == "-" and value[7] == "-":
+            dt = datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            return dt.isoformat().replace("+00:00", "Z")
+        return value
+
+    def _strip_value(self, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        return str(value).strip()
+
     def upsert_disclosure(self, rcept_no: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         공시 정보를 생성하거나 업데이트한다.
@@ -99,26 +120,24 @@ class DisclosureServiceClient:
         
         # Celery 메시지를 Disclosure Service API 스키마에 맞게 변환
         payload = {
-            "rcept_no": rcept_no,
-            "corp_code": data.get("corp_code"),
-            "corp_name": data.get("corp_name"),
-            "stock_code": data.get("stock_code"),
-            "corp_cls": data.get("corp_cls"),
-            "report_nm": data.get("report_nm"),
-            "flr_nm": data.get("flr_nm"),
-            "rcept_dt": data.get("rcept_dt"),
-            "rm": data.get("rm"),
-            "minio_object_name": data.get("object_key"),
-            "content_type": data.get("content_type"),
-            "file_size": data.get("file_size"),
-            "metadata": {
-                "polling_date": data.get("polling_date"),
-                "source": "ingestion_service",
-            }
+            "reportName": self._strip_value(data.get("report_nm")),
+            "corpCode": self._strip_value(data.get("corp_code")),
+            "corpName": self._strip_value(data.get("corp_name")),
+            "corpCls": self._strip_value(data.get("corp_cls")),
+            "flrName": self._strip_value(data.get("flr_nm")),
+            "receptionDate": self._format_reception_date(data.get("rcept_dt")),
         }
-        
-        # None 값 제거
-        payload = {k: v for k, v in payload.items() if v is not None}
+
+        optional_payload = {
+            "stockCode": self._strip_value(data.get("stock_code")),
+            "remark": self._strip_value(data.get("rm")),
+            "minioObjectName": self._strip_value(data.get("object_key")),
+            "contentType": self._strip_value(data.get("content_type")),
+            "fileSize": data.get("file_size"),
+            "tags": data.get("tags"),
+        }
+
+        payload.update({k: v for k, v in optional_payload.items() if v is not None})
         
         last_error = None
         for attempt in range(self.max_retries):

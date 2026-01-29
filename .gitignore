@@ -56,7 +56,7 @@ coverage.xml
 *.py,cover
 
 # Logs
-logs/
+failed_logs/
 *.log
 failed_disclosures/
 

@@ -322,11 +322,12 @@ PW: minioadmin
 ### 6.4 실패 로그
 
 ```bash
+# 실패 로그는 프로젝트 루트의 failed_logs/에 저장됩니다.
 # 실패한 공시 목록
-ls -la logs/failed_logs/
+ls -la failed_logs/
 
 # 특정 실패 상세 확인
-cat logs/failed_logs/20241125000001.json
+cat failed_logs/20241125000001.json
 ```
 
 ---

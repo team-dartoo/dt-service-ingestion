@@ -111,7 +111,7 @@ Ingestion Service는 **DART 공시 데이터의 수집, 저장, 전달 파이프
 │   │                                                                       │  │
 │   │   ┌─────────────┐   ┌─────────────┐   ┌─────────────────────────────┐│  │
 │   │   │  Celery     │   │   HTTP      │   │  Disclosure Service        ││  │
-│   │   │  Worker     │──▶│   Client    │──▶│  PUT /api/v1/disclosures/  ││  │
+│   │   │  Worker     │──▶│   Client    │──▶│  PUT /api/disclosures/  ││  │
 │   │   │             │   │             │   │                             ││  │
 │   │   │ 메시지 수신  │   │ 재시도 로직  │   │  메타데이터 저장             ││  │
 │   │   └─────────────┘   └─────────────┘   └─────────────────────────────┘│  │
@@ -174,7 +174,7 @@ Ingestion Service는 **DART 공시 데이터의 수집, 저장, 전달 파이프
    └─ metadata 추가 (polling_date, source)
    
 3. Disclosure Service API 호출
-   └─ PUT /api/v1/disclosures/{rcept_no}
+   └─ PUT /api/disclosures/{rcept_no}
    └─ 헤더: X-Worker-Api-Key
    
 4. 결과 처리
@@ -345,7 +345,7 @@ cat logs/failed_logs/20241125000001.json
 │                                                                  │
 │        │                                      │                  │
 │        │  HTTP PUT                            │                  │
-│        │  /api/v1/disclosures/{rcept_no}     │                  │
+│        │  /api/disclosures/{rcept_no}     │                  │
 │        │  Header: X-Worker-Api-Key           │                  │
 │        │──────────────────────────────────────►│                  │
 │        │                                      │                  │

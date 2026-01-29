@@ -337,7 +337,7 @@ def load_config() -> AppConfig:
             broker_url=_get_env("CELERY_BROKER_URL", ""),
         ),
         disclosure=DisclosureServiceConfig(
-            base_url=_get_env("DISCLOSURE_SERVICE_URL", "http://disclosure-api:8000"),
+            base_url=_get_env("DISCLOSURE_SERVICE_URL", "http://disclosure-service:8000"),
             api_key=_get_env("WORKER_API_KEY", ""),
             timeout=_get_env_int("REQUEST_TIMEOUT", 30),
             max_retries=_get_env_int("MAX_RETRIES", 3),

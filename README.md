@@ -272,7 +272,7 @@ docker-compose logs -f consumer  # 메타데이터 전송 로그
 | `MINIO_SECRET_KEY` | ✅ | MinIO 비밀 키 | - |
 | `MINIO_BUCKET` | ❌ | 버킷 이름 | `dart-disclosures` |
 | `CELERY_BROKER_URL` | ✅ | RabbitMQ URL | - |
-| `DISCLOSURE_SERVICE_URL` | ✅ | Disclosure Service URL | `http://disclosure-api:8000` |
+| `DISCLOSURE_SERVICE_URL` | ✅ | Disclosure Service URL | `http://disclosure-service:8000` |
 | `WORKER_API_KEY` | ✅ | Worker 인증 키 | - |
 | `POLL_INTERVAL` | ❌ | 폴링 간격 (초) | `300` |
 | `TARGET_DATE` | ❌ | 특정 날짜만 폴링 (YYYYMMDD) | (오늘) |

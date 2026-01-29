@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 # Disclosure Service 설정
 DISCLOSURE_SERVICE_URL = os.getenv(
     "DISCLOSURE_SERVICE_URL", 
-    "http://disclosure-api:8000"
+    "http://disclosure-service:8000"
 )
 WORKER_API_KEY = os.getenv("WORKER_API_KEY", "")
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "30"))

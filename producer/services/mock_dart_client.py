@@ -12,7 +12,7 @@ import logging
 import random
 import time
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +81,35 @@ class MockDartApiClient:
             if rcept_no not in self._generated_rcept_nos:
                 self._generated_rcept_nos.add(rcept_no)
                 return rcept_no
+
+    def fetch_disclosures(
+        self,
+        date: str,
+        page_no: int = 1,
+        page_count: int = 100,
+        corp_code: Optional[str] = None,
+        corp_cls: Optional[str] = None,
+        pblntf_ty: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        실제 DartApiClient와 동일한 인터페이스.
+
+        Note:
+            page_no, page_count, corp_code, corp_cls, pblntf_ty는 Mock에서 미사용.
+        """
+        disclosures = self.fetch_disclosure_list(date)
+        return {
+            "status": "000",
+            "total_count": len(disclosures),
+            "total_page": 1,
+            "list": disclosures,
+        }
+
+    def fetch_document_content(self, rcept_no: str) -> Optional[bytes]:
+        """
+        실제 DartApiClient와 동일한 인터페이스.
+        """
+        return self.download_document(rcept_no)
     
     def fetch_disclosure_list(self, target_date: str) -> List[Dict[str, Any]]:
         """

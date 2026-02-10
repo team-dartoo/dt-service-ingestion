@@ -111,7 +111,7 @@ Ingestion Service는 **DART 공시 데이터의 수집, 저장, 전달 파이프
 │   │                                                                       │  │
 │   │   ┌─────────────┐   ┌─────────────┐   ┌─────────────────────────────┐│  │
 │   │   │  Celery     │   │   HTTP      │   │  Disclosure Service        ││  │
-│   │   │  Worker     │──▶│   Client    │──▶│  PUT /api/v1/disclosures/  ││  │
+│   │   │  Worker     │──▶│   Client    │──▶│  PUT /api/disclosures/  ││  │
 │   │   │             │   │             │   │                             ││  │
 │   │   │ 메시지 수신  │   │ 재시도 로직  │   │  메타데이터 저장             ││  │
 │   │   └─────────────┘   └─────────────┘   └─────────────────────────────┘│  │
@@ -174,7 +174,7 @@ Ingestion Service는 **DART 공시 데이터의 수집, 저장, 전달 파이프
    └─ metadata 추가 (polling_date, source)
    
 3. Disclosure Service API 호출
-   └─ PUT /api/v1/disclosures/{rcept_no}
+   └─ PUT /api/disclosures/{rcept_no}
    └─ 헤더: X-Worker-Api-Key
    
 4. 결과 처리
@@ -272,7 +272,7 @@ docker-compose logs -f consumer  # 메타데이터 전송 로그
 | `MINIO_SECRET_KEY` | ✅ | MinIO 비밀 키 | - |
 | `MINIO_BUCKET` | ❌ | 버킷 이름 | `dart-disclosures` |
 | `CELERY_BROKER_URL` | ✅ | RabbitMQ URL | - |
-| `DISCLOSURE_SERVICE_URL` | ✅ | Disclosure Service URL | `http://disclosure-api:8000` |
+| `DISCLOSURE_SERVICE_URL` | ✅ | Disclosure Service URL | `http://disclosure-service:8000` |
 | `WORKER_API_KEY` | ✅ | Worker 인증 키 | - |
 | `POLL_INTERVAL` | ❌ | 폴링 간격 (초) | `300` |
 | `TARGET_DATE` | ❌ | 특정 날짜만 폴링 (YYYYMMDD) | (오늘) |
@@ -322,11 +322,12 @@ PW: minioadmin
 ### 6.4 실패 로그
 
 ```bash
+# 실패 로그는 프로젝트 루트의 failed_logs/에 저장됩니다.
 # 실패한 공시 목록
-ls -la logs/failed_logs/
+ls -la failed_logs/
 
 # 특정 실패 상세 확인
-cat logs/failed_logs/20241125000001.json
+cat failed_logs/20241125000001.json
 ```
 
 ---
@@ -345,7 +346,7 @@ cat logs/failed_logs/20241125000001.json
 │                                                                  │
 │        │                                      │                  │
 │        │  HTTP PUT                            │                  │
-│        │  /api/v1/disclosures/{rcept_no}     │                  │
+│        │  /api/disclosures/{rcept_no}     │                  │
 │        │  Header: X-Worker-Api-Key           │                  │
 │        │──────────────────────────────────────►│                  │
 │        │                                      │                  │

@@ -129,6 +129,7 @@ class DisclosureServiceConfig:
         
         return errors
 
+DEFAULT_FAILED_LOG_DIR = "/app/failed_logs"
 
 @dataclass 
 class PollingConfig:
@@ -229,6 +230,7 @@ class AppConfig:
                 "interval_seconds": self.polling.interval_seconds,
                 "target_date": self.polling.target_date,
                 "max_fail": self.polling.max_fail,
+                "failed_log_dir": self.polling.failed_log_dir,
             },
             "health": {
                 "enabled": self.health.enabled,
@@ -318,6 +320,11 @@ def load_config() -> AppConfig:
     if missing:
         raise ConfigValidationError(missing=missing, invalid=[])
     
+    failed_log_dir = _get_env("FAILED_LOG_DIR")
+    if not failed_log_dir:
+        failed_log_dir = DEFAULT_FAILED_LOG_DIR
+        logger.info(f"FAILED_LOG_DIR not set, using default: {failed_log_dir}")
+    
     # 설정 객체 생성
     config = AppConfig(
         dart=DartApiConfig(
@@ -337,7 +344,7 @@ def load_config() -> AppConfig:
             broker_url=_get_env("CELERY_BROKER_URL", ""),
         ),
         disclosure=DisclosureServiceConfig(
-            base_url=_get_env("DISCLOSURE_SERVICE_URL", "http://disclosure-api:8000"),
+            base_url=_get_env("DISCLOSURE_SERVICE_URL", "http://disclosure-service:8000"),
             api_key=_get_env("WORKER_API_KEY", ""),
             timeout=_get_env_int("REQUEST_TIMEOUT", 30),
             max_retries=_get_env_int("MAX_RETRIES", 3),
@@ -346,7 +353,7 @@ def load_config() -> AppConfig:
             interval_seconds=_get_env_int("POLL_INTERVAL", 300),
             target_date=_get_env("TARGET_DATE"),
             max_fail=_get_env_int("MAX_FAIL", 3),
-            failed_log_dir=_get_env("FAILED_LOG_DIR"),
+            failed_log_dir=failed_log_dir,
         ),
         health=HealthCheckConfig(
             enabled=_get_env_bool("HEALTH_ENABLED", True),

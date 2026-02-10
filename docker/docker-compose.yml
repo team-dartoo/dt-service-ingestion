@@ -109,8 +109,12 @@ services:
       MINIO_ENDPOINT: ingestion-minio:9000
       # Celery/RabbitMQ (컨테이너명 사용)
       CELERY_BROKER_URL: amqp://${RABBITMQ_USER:-admin}:${RABBITMQ_PASSWORD:-admin123}@ingestion-rabbitmq:5672/
+      # 실패 로그 디렉토리 명시적 설정
+      FAILED_LOG_DIR: ${FAILED_LOG_DIR:-/app/failed_logs}
     ports:
       - "${HEALTH_PORT:-8001}:8001"
+    volumes:
+      - ../failed_logs:/app/failed_logs
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -142,7 +146,7 @@ services:
       # Celery/RabbitMQ (컨테이너명 사용)
       CELERY_BROKER_URL: amqp://${RABBITMQ_USER:-admin}:${RABBITMQ_PASSWORD:-admin123}@ingestion-rabbitmq:5672/
       # Disclosure Service (dartoo-network를 통해 접근)
-      DISCLOSURE_SERVICE_URL: http://disclosure-api:8000
+      DISCLOSURE_SERVICE_URL: http://disclosure-service:8000
     depends_on:
       rabbitmq:
         condition: service_healthy

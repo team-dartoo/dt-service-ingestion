@@ -18,10 +18,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy producer code
 COPY producer/ /app/
 
+# 실패 로그 디렉토리 생성
+RUN mkdir -p /app/failed_logs && chmod 755 /app/failed_logs
+
 # 환경 변수 기본값
 ENV HEALTH_ENABLED=true
 ENV HEALTH_PORT=8001
 ENV LOG_LEVEL=INFO
+ENV FAILED_LOG_DIR=/app/failed_logs
 
 # 헬스체크 포트 노출
 EXPOSE 8001

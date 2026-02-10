@@ -14,7 +14,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # -------------------- Celery 브로커 설정 --------------------
-default_broker = "amqp://admin:password@rabbitmq:5672/"
+default_broker = "amqp://admin:admin123@rabbitmq:5672/"
 broker_url = os.getenv("CELERY_BROKER_URL", default_broker)
 
 logger.info(f"Starting Celery worker with broker: {broker_url}")
